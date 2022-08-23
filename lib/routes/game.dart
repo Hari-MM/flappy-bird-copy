@@ -16,87 +16,119 @@ class Game extends StatefulWidget {
 }
 
 class _GameState extends State<Game> with SingleTickerProviderStateMixin {
-  static const double birdX = 120;
+  static const Size birdSpriteSize = Size(80, 80);
   static const Size birdHitboxSize = Size(30, 40);
+  static const double birdX = 120;
   static const double pipeWidth = 60;
-  static const double accY = 0.1;
-  static const double startingVelY = 5;
-  static const double velX = 100;
-  static const double startingBirdY = 350;
+  static const double pipeMinHeight = 50;
+  static const double pipeGapMinHeight = 150;
+  static const double pipeGapMaxHeight = 400;
+  static const double pipeStartingVelX = 200;
+  static const double birdAccY = 0.2;
+  static const double birdStartingVelY = 8;
+  static const double birdStartingY = 350;
   static const int ticksInASecond = 60;
-  static const int pipeGenerationDelay = 3;
+  static const int pipeMinGenerationDelay = 1;
+  static const int pipeMaxGenerationDelay = 3;
 
   final int ticksDelay = (1000 / ticksInASecond).floor();
 
   bool isGameStarted = false;
-  double birdY = startingBirdY;
-  double startJumpY = startingBirdY;
+  double birdY = birdStartingY;
+  double birdVelY = birdStartingVelY;
+  double birdStartingJumpY = birdStartingY;
+  double pipeVelX = pipeStartingVelX;
   Timer? gameTimer;
-  double velY = startingVelY;
   int time = 0;
   int score = 0;
   List<Pipe> pipes = [];
-  late StreamController<int> _bestScoreController;
 
+  late StreamController<int> _bestScoreController;
   late Rect floorRect;
   late final int oldBestScore;
 
   void jump() {
-    print('jump');
     time = 0;
-    velY = startingVelY;
-    startJumpY = birdY;
+    birdVelY = birdStartingVelY;
+    birdStartingJumpY = birdY;
   }
 
   void start() {
     isGameStarted = true;
     gameTimer = Timer.periodic(
+      // TODO: Could change this into a ticker
       Duration(milliseconds: ticksDelay),
       (timer) {
         setState(() {
-          velY -= accY;
-          birdY = startJumpY - velY * time;
-          if (birdY < 0 || birdY > floorRect.top) {
-            gameOver();
-          }
+          birdVelY -= birdAccY;
+          birdY = birdStartingJumpY - birdVelY * time;
 
-          if (timer.tick % (ticksInASecond * pipeGenerationDelay) == 1) {
-            final List<Pipe> newPipe = getPipe();
-            pipes.addAll(newPipe);
-          }
+          checkVerticalBounds();
+
+          addPipeOnDelay(timer.tick);
 
           for (int i = 0; i < pipes.length; i++) {
-            final Pipe p = pipes[i];
-            final Rect newRect = Rect.fromLTWH(
-              p.rect.left - velX / ticksInASecond,
-              p.rect.top,
-              p.rect.width,
-              p.rect.height,
-            );
-            pipes[i] = Pipe(newRect);
-
-            final birdRect = Rect.fromCenter(
-              center: Offset(birdX, birdY),
-              width: birdHitboxSize.width,
-              height: birdHitboxSize.height,
-            );
-
-            if (birdRect.overlaps(p.rect)) {
-              gameOver();
-            }
-          }
-          if (score * 2 < pipes.length && pipes[score * 2].rect.left < birdX) {
-            print(score++);
-            if (score > oldBestScore) {
-              _bestScoreController.sink.add(score);
-            }
+            updatePipeXAt(i);
+            checkPipeCollisionAt(i);
           }
 
+          updateScore();
+
+          pipeVelX = pipeStartingVelX + timer.tick / (ticksInASecond);
           time++;
         });
       },
     );
-    print('start');
+  }
+
+  void updatePipeXAt(int i) {
+    final Pipe pipe = pipes[i];
+    final Rect newPipeRect = Rect.fromLTWH(
+      pipe.rect.left - pipeVelX / ticksInASecond,
+      pipe.rect.top,
+      pipe.rect.width,
+      pipe.rect.height,
+    );
+    pipes[i] = Pipe(newPipeRect);
+  }
+
+  void updateScore() {
+    if (score * 2 < pipes.length && pipes[score * 2].rect.left < birdX) {
+      score++;
+      if (score > oldBestScore) {
+        _bestScoreController.sink.add(score);
+      }
+    }
+  }
+
+  void checkPipeCollisionAt(int i) {
+    final pipe = pipes[i];
+    final birdRect = Rect.fromCenter(
+      center: Offset(birdX, birdY),
+      width: birdHitboxSize.width,
+      height: birdHitboxSize.height,
+    );
+
+    if (birdRect.overlaps(pipe.rect)) {
+      gameOver();
+    }
+  }
+
+  void checkVerticalBounds() {
+    if (birdY < 0 || birdY > floorRect.top) {
+      gameOver();
+    }
+  }
+
+  void addPipeOnDelay(int ticksSinceLastPipe) {
+    final int delay =
+        Random().nextInt(pipeMaxGenerationDelay - pipeMinGenerationDelay) +
+            pipeMinGenerationDelay;
+
+    if (ticksSinceLastPipe % (ticksInASecond * delay) == 1) {
+      final List<Pipe> newPipe = getNewPipe();
+      pipes.addAll(newPipe);
+    }
   }
 
   void reset() {
@@ -104,18 +136,20 @@ class _GameState extends State<Game> with SingleTickerProviderStateMixin {
       isGameStarted = false;
       score = 0;
       time = 0;
-      birdY = startingBirdY;
-      startJumpY = birdY;
-      velY = startingVelY;
+      birdY = birdStartingY;
+      birdStartingJumpY = birdY;
+      birdVelY = birdStartingVelY;
       pipes = [];
     });
   }
 
-  List<Pipe> getPipe() {
-    // TODO: Move these numbers somewhere else
-    final double gap = Random().nextDouble() * (200 - 120) + 120;
+  List<Pipe> getNewPipe() {
+    final double gap =
+        Random().nextDouble() * (pipeGapMaxHeight - pipeGapMinHeight) +
+            pipeGapMinHeight;
     final double gapBottom =
-        Random().nextDouble() * (floorRect.top - gap - 50 * 2) + 50;
+        Random().nextDouble() * (floorRect.top - gap - pipeMinHeight * 2) +
+            pipeMinHeight;
 
     final Rect topPipeRect = Rect.fromLTRB(
       //Rect.fromLTWH(
@@ -124,26 +158,34 @@ class _GameState extends State<Game> with SingleTickerProviderStateMixin {
       floorRect.right + pipeWidth,
       floorRect.top - gapBottom - gap,
     );
+
     final Rect bottomPipeRect = Rect.fromLTRB(
       floorRect.right,
       floorRect.top - gapBottom,
       floorRect.right + pipeWidth,
       floorRect.top,
     );
+
     return [Pipe(topPipeRect), Pipe(bottomPipeRect)];
   }
 
   void gameOver() async {
     gameTimer?.cancel();
     Scorer.storeIfBest(score);
-    await showDialog(
-        context: context,
-        builder: (contetx) => const Dialog(
-              child: Padding(
-                padding: EdgeInsets.all(16),
-                child: Text('Game Over'),
-              ),
-            ));
+
+    const dialog = Dialog(
+      backgroundColor: Colors.transparent,
+      child: Padding(
+        padding: EdgeInsetsDirectional.all(16),
+        child: Text(
+          'Game Over',
+          textScaleFactor: 2,
+          style: TextStyle(color: Colors.white),
+        ),
+      ),
+    );
+
+    await showDialog(context: context, builder: (contetx) => dialog);
     reset();
   }
 
@@ -221,7 +263,11 @@ class _GameState extends State<Game> with SingleTickerProviderStateMixin {
               children: [
                 Background(floorRect),
                 ...pipes,
-                Bird(birdX, birdY),
+                Bird(Rect.fromCenter(
+                  center: Offset(birdX, birdY),
+                  width: birdSpriteSize.width,
+                  height: birdSpriteSize.height,
+                )),
                 isGameStarted ? scoreText : tapToPlayText,
                 Positioned.fromRect(
                   rect: floorRect,

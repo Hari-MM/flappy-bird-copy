@@ -1,16 +1,9 @@
 import 'package:flutter/material.dart';
 
 class Bird extends StatelessWidget {
-  late final Rect rect;
-  final double size = 80;
+  final Rect rect;
 
-  Bird(x, y, {Key? key}) : super(key: key) {
-    rect = Rect.fromCenter(
-      center: Offset(x, y),
-      width: size,
-      height: size,
-    );
-  }
+  const Bird(this.rect, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {

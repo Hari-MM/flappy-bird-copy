@@ -2,7 +2,8 @@ import 'package:flutter/material.dart';
 
 class Background extends StatelessWidget {
   final Rect floorRect;
-  Background(this.floorRect, {Key? key}) : super(key: key);
+
+  const Background(this.floorRect, {Key? key}) : super(key: key);
 
   @override
   Widget build(BuildContext context) {
